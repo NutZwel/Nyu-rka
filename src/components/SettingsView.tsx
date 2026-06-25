@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { LogIn, LogOut, Monitor, Eye, Music, Key, Check, Palette } from 'lucide-react'
+import { LogIn, LogOut, Monitor, Eye, Music, Key, Check, Palette, Image as ImageIcon, Trash2 } from 'lucide-react'
 import { useThemeStore } from '../store/themeStore'
 import { useAppStore } from '../store/appStore'
 
@@ -94,6 +94,31 @@ export default function SettingsView() {
             <Eye size={16} />
           </button>
         </SettingCard>
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-[10px] font-semibold tracking-wider" style={{ color: theme.textSecondary }}>MASCOT</div>
+
+        <SettingCard label="Custom GIF" description="Ganti pixel mascot dengan GIF">
+          <button className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all"
+            style={{ background: useThemeStore.getState().customMascotPath ? `${theme.error}20` : `${theme.primary}15`, color: useThemeStore.getState().customMascotPath ? theme.error : theme.primary }}
+            onClick={async () => {
+              const path = await window.electronAPI?.selectGif()
+              if (path) useThemeStore.getState().setCustomMascotPath(path)
+            }}>
+            <ImageIcon size={12} />{useThemeStore.getState().customMascotPath ? 'Ganti GIF' : 'Pilih GIF'}
+          </button>
+        </SettingCard>
+
+        {useThemeStore.getState().customMascotPath && (
+          <SettingCard label="Reset Mascot" description="Kembali ke pixel mascot">
+            <button className="px-3 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-all"
+              style={{ background: `${theme.error}20`, color: theme.error }}
+              onClick={() => useThemeStore.getState().setCustomMascotPath(null)}>
+              <Trash2 size={12} />Reset
+            </button>
+          </SettingCard>
+        )}
       </div>
 
       <div className="space-y-2">

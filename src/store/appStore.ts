@@ -6,12 +6,16 @@ interface AppState {
   isLoggedIn: boolean
   isMinimalView: boolean
   searchQuery: string
+  showSplash: boolean
+  sidebarWidth: number
 
   setPage: (page: AppState['page']) => void
   setAlwaysOnTop: (val: boolean) => void
   setLoggedIn: (val: boolean) => void
   toggleMinimalView: () => void
   setSearchQuery: (q: string) => void
+  setShowSplash: (val: boolean) => void
+  setSidebarWidth: (w: number) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -20,6 +24,8 @@ export const useAppStore = create<AppState>((set) => ({
   isLoggedIn: false,
   isMinimalView: false,
   searchQuery: '',
+  showSplash: true,
+  sidebarWidth: 64,
 
   setPage: (page) => set({ page }),
   setAlwaysOnTop: (val) => set({ alwaysOnTop: val }),
@@ -30,4 +36,10 @@ export const useAppStore = create<AppState>((set) => ({
   },
 
   setSearchQuery: (q) => set({ searchQuery: q }),
+  setShowSplash: (val) => set({ showSplash: val }),
+
+  setSidebarWidth: (w) => {
+    set({ sidebarWidth: w })
+    window.electronAPI?.storeSet?.('sidebarWidth', w)
+  },
 }))

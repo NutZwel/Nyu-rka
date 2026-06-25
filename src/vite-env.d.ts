@@ -27,6 +27,7 @@ interface ElectronAPI {
   storeGet: (key: string) => Promise<any>
   storeSet: (key: string, value: any) => Promise<boolean>
   showNotification: (title: string, body: string) => void
+  selectGif: () => Promise<string | null>
 }
 
 declare global {

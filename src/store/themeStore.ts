@@ -24,6 +24,8 @@ const defaultTheme: Theme = {
 interface ThemeState {
   theme: Theme
   mascot: string
+  customMascotPath: string | null
+  useCustomMascot: boolean
   availableThemes: { name: string; icon: string; mascot: string; theme: Partial<Theme> }[]
   isThemeEditorOpen: boolean
   loadTheme: () => Promise<void>
@@ -32,6 +34,8 @@ interface ThemeState {
   resetTheme: () => void
   toggleThemeEditor: () => void
   applyPreset: (name: string) => void
+  setCustomMascotPath: (path: string | null) => void
+  setUseCustomMascot: (val: boolean) => void
 }
 
 const presets: { name: string; icon: string; mascot: string; theme: Partial<Theme> }[] = [
@@ -88,6 +92,8 @@ const presets: { name: string; icon: string; mascot: string; theme: Partial<Them
 export const useThemeStore = create<ThemeState>((set, get) => ({
   theme: defaultTheme,
   mascot: 'whale',
+  customMascotPath: null,
+  useCustomMascot: false,
   availableThemes: presets,
   isThemeEditorOpen: false,
 
@@ -98,6 +104,10 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
         const preset = presets.find(p => p.name === saved.name)
         set({ theme: { ...defaultTheme, ...saved }, mascot: preset?.mascot || 'whale' })
       }
+      // Load custom mascot path
+      const customPath = await window.electronAPI?.storeGet?.('customMascotPath')
+      const useCustom = await window.electronAPI?.storeGet?.('useCustomMascot')
+      if (customPath) set({ customMascotPath: customPath, useCustomMascot: !!useCustom })
     } catch (e) { console.warn('Could not load theme', e) }
   },
 
@@ -113,8 +123,10 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   },
 
   resetTheme: () => {
-    set({ theme: defaultTheme, mascot: 'whale' })
+    set({ theme: defaultTheme, mascot: 'whale', useCustomMascot: false, customMascotPath: null })
     window.electronAPI?.setTheme(defaultTheme)
+    window.electronAPI?.storeSet?.('customMascotPath', null)
+    window.electronAPI?.storeSet?.('useCustomMascot', false)
   },
 
   toggleThemeEditor: () => set(state => ({ isThemeEditorOpen: !state.isThemeEditorOpen })),
@@ -126,5 +138,16 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
       set({ theme: updated, mascot: preset.mascot })
       window.electronAPI?.setTheme(updated)
     }
+  },
+
+  setCustomMascotPath: (path: string | null) => {
+    set({ customMascotPath: path, useCustomMascot: !!path })
+    window.electronAPI?.storeSet?.('customMascotPath', path)
+    window.electronAPI?.storeSet?.('useCustomMascot', !!path)
+  },
+
+  setUseCustomMascot: (val: boolean) => {
+    set({ useCustomMascot: val })
+    window.electronAPI?.storeSet?.('useCustomMascot', val)
   },
 }))

@@ -9,6 +9,14 @@ import { useAppStore } from '../store/appStore'
 import DancingRobot from './DancingRobot'
 import PixelMascot from './PixelMascot'
 
+function invertHex(hex: string): string {
+  const c = hex.replace('#', '')
+  const r = (255 - parseInt(c.substring(0,2), 16)).toString(16).padStart(2,'0')
+  const g = (255 - parseInt(c.substring(2,4), 16)).toString(16).padStart(2,'0')
+  const b = (255 - parseInt(c.substring(4,6), 16)).toString(16).padStart(2,'0')
+  return `#${r}${g}${b}`
+}
+
 export default function PlayerView() {
   const { theme } = useThemeStore()
   const {
@@ -30,13 +38,41 @@ export default function PlayerView() {
       {currentTrack ? (
         <>
           {/* Album Art */}
-          <div className="relative group">
+          <div className="relative group" style={{ filter: isPlaying ? 'drop-shadow(0 0 0)' : undefined }}>
+            {/* Shadow berlawanan — gelap kalau background terang, terang kalau background gelap */}
             <div
-              className="overflow-hidden"
+              className="absolute rounded-full"
               style={{
                 width: 200,
                 height: 200,
-                borderRadius: 24,
+                top: 8,
+                left: 8,
+                background: invertHex(theme.background),
+                opacity: 0.25,
+                filter: 'blur(24px)',
+                transform: 'translateY(8px) scale(0.95)',
+                transition: 'all 0.3s ease',
+              }}
+            />
+            {isPlaying && (
+              <div
+                className="absolute rounded-full animate-spin-slow"
+                style={{
+                  width: 224,
+                  height: 224,
+                  top: -12,
+                  left: -12,
+                  border: '2px solid',
+                  borderColor: `${theme.primary}30`,
+                  borderTopColor: theme.primary,
+                }}
+              />
+            )}
+            <div
+              className="overflow-hidden rounded-full"
+              style={{
+                width: 200,
+                height: 200,
                 boxShadow: `0 8px 32px ${theme.primary}30`,
               }}
             >

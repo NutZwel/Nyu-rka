@@ -9,7 +9,7 @@ import { Track } from '../types'
 
 export default function SearchView() {
   const { theme } = useThemeStore()
-  const { setTrack, addToQueue, setSearchResults, searchResults, setIsSearching, isSearching, importPlaylist } = usePlayerStore()
+  const { addToQueue, setSearchResults, searchResults, setIsSearching, isSearching, importPlaylist } = usePlayerStore()
   const [query, setQuery] = useState('')
   const [recentSearches, setRecentSearches] = useState<string[]>([])
   const [showPlaylistInput, setShowPlaylistInput] = useState(false)
@@ -92,7 +92,6 @@ export default function SearchView() {
   }
 
   const handlePlay = (track: Track) => {
-    setTrack(track)
     addToQueue(track)
   }
 

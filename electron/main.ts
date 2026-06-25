@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, Tray, Menu } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, Tray, Menu } from 'electron'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import Store from 'electron-store'
@@ -187,6 +187,19 @@ app.whenReady().then(() => {
   ipcMain.handle('store-set', (_event, key: string, value: any) => {
     store.set(key, value)
     return true
+  })
+
+  // File dialog for custom GIF mascot
+  ipcMain.handle('select-gif', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Select GIF for Mascot',
+      filters: [{ name: 'GIF Images', extensions: ['gif'] }],
+      properties: ['openFile'],
+    })
+    if (!result.canceled && result.filePaths.length > 0) {
+      return result.filePaths[0]
+    }
+    return null
   })
 })
 

@@ -357,8 +357,10 @@ interface Props {
 export default function PixelMascot({ type, size = 40 }: Props) {
   const [frameIndex, setFrameIndex] = useState(0)
   const theme = useThemeStore(s => s.theme)
+  const { customMascotPath, useCustomMascot } = useThemeStore()
   const { isPlaying } = usePlayerStore()
 
+  // Pixel sprite frames (selalu dihitung, untuk hooks)
   const sprites = mascotSprites[type]
   const frames: Frames = sprites || mascotSprites.whale
 
@@ -368,8 +370,22 @@ export default function PixelMascot({ type, size = 40 }: Props) {
       setFrameIndex(i => (i + 1) % frames.length)
     }, speed)
     return () => clearInterval(interval)
-  }, [isPlaying, type])
+  }, [isPlaying, type, useCustomMascot, customMascotPath])
 
+  // Custom GIF mode
+  if (useCustomMascot && customMascotPath) {
+    return (
+      <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden' }}>
+        <img
+          src={`file://${customMascotPath}`}
+          alt=""
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      </div>
+    )
+  }
+
+  // Pixel sprite mode
   const frame = frames[frameIndex]
   const ps = size / 16
 

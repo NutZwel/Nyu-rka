@@ -96,8 +96,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   addToQueue: (track: Track) => {
     const item: QueueItem = { track, addedBy: 'user', requestedAt: Date.now() }
     set(state => {
-      // If no track is playing, auto-play this track
-      if (!state.currentTrack && state.queue.length === 0) {
+      // Jika queue kosong, auto-play langsung
+      if (state.queue.length === 0) {
         return { queue: [item], queueIndex: 0, currentTrack: track, progress: 0, duration: track.duration || 0 }
       }
       return { queue: [...state.queue, item] }
@@ -117,7 +117,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     })
   },
 
-  clearQueue: () => set({ queue: [], queueIndex: -1 }),
+  clearQueue: () => set({ queue: [], queueIndex: -1, currentTrack: null, progress: 0, duration: 0, isPlaying: false }),
 
   nextTrack: async () => {
     const state = get()

@@ -3,115 +3,155 @@ import { usePlayerStore } from '../store/playerStore'
 
 export function useAudioPlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const animFrameRef = useRef<number>()
   const currentTrackIdRef = useRef<string | null>(null)
-  const objectUrlRef = useRef<string | null>(null)
+  const cleanupRef = useRef<(() => void) | null>(null)
+  const loadingRef = useRef(false)
 
   const {
     currentTrack, isPlaying, volume, loopMode,
     setPlaying, setProgress, setDuration, nextTrack,
   } = usePlayerStore()
 
+  /** Stop audio segera — synchronous, paksa berhenti */
+  const stopAudio = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    // Hapus semua listener dulu biar gak trigger error saat src di-clear
+    cleanupRef.current?.()
+    cleanupRef.current = null
+    audio.pause()
+    // Clear src biar audio beneran stop & lepas resource
+    audio.src = ''
+    audio.load()
+    // Matiin juga server HTTP
+    window.electronAPI?.youtubeStopStream()
+  }, [])
+
   // Init audio element
   useEffect(() => {
     if (!audioRef.current) {
       audioRef.current = new Audio()
+      // Biar gak nahan resource ketika user ganti lagu
+      audioRef.current.preload = 'none'
     }
     return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
-      if (objectUrlRef.current) { URL.revokeObjectURL(objectUrlRef.current); objectUrlRef.current = null }
+      stopAudio()
+      if (audioRef.current) {
+        audioRef.current.src = ''
+        audioRef.current.load()
+      }
     }
-  }, [])
+  }, [stopAudio])
 
   // Load and play track
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio || !currentTrack) return
+    if (!audio) return
+
+    // Jika currentTrack null → stop total
+    if (!currentTrack) {
+      stopAudio()
+      currentTrackIdRef.current = null
+      return
+    }
+
+    // Sama kaya sebelumnya, skip
     if (currentTrack.id === currentTrackIdRef.current) return
     currentTrackIdRef.current = currentTrack.id
 
-    const run = async () => {
-      try {
-        // Stop previous
-        window.electronAPI?.youtubeStopStream()
-        if (objectUrlRef.current) { URL.revokeObjectURL(objectUrlRef.current); objectUrlRef.current = null }
+    // ⚡ STOP DULU sebelum mulai yang baru
+    // Ini kunci fix — paksa audio berhenti SEKARANG juga, syncronous
+    stopAudio()
 
-        // Auto-search YouTube if no youtubeId/youtubeUrl
+    let cancelled = false
+
+    const run = async () => {
+      loadingRef.current = true
+
+      try {
+        // Cari YouTube URL kalau belum ada
         let ytUrl = currentTrack.youtubeUrl
         let ytId = currentTrack.youtubeId
         if (!ytUrl && ytId) {
           ytUrl = `https://youtube.com/watch?v=${ytId}`
         }
         if (!ytUrl) {
-          console.log('Auto-searching YouTube for:', currentTrack.title, currentTrack.artist)
-          const query = `${currentTrack.title} ${currentTrack.artist} music`
-          const results = await window.electronAPI?.youtubeSearch(query)
+          console.log('Searching YouTube:', currentTrack.title, currentTrack.artist)
+          const q = `${currentTrack.title} ${currentTrack.artist} music`
+          const results = await window.electronAPI?.youtubeSearch(q)
           if (Array.isArray(results) && results.length > 0) {
             ytUrl = results[0].url
             ytId = results[0].id
           }
         }
-        if (!ytUrl) { setPlaying(false); return }
+        if (!ytUrl || cancelled) { setPlaying(false); loadingRef.current = false; return }
 
         const result = await window.electronAPI?.youtubeGetStream(ytUrl)
-        if (!result || result.error) {
-          console.error('Stream error:', result?.error || 'Unknown')
+        if (!result || result.error || !result.streamUrl || cancelled) {
+          console.error('Stream error:', result?.error || 'No URL')
           setPlaying(false)
-          return
-        }
-
-        if (!result.streamUrl) {
-          console.error('No stream URL in response')
-          setPlaying(false)
+          loadingRef.current = false
           return
         }
 
         if (result.duration) setDuration(result.duration)
-
-        // Use streaming URL directly — HTML5 Audio handles chunked HTTP
         audio.src = result.streamUrl
 
-        // Play as soon as data starts flowing
-        audio.oncanplay = () => {
+        const onCanPlay = () => {
           if (usePlayerStore.getState().isPlaying) {
-            audio.play().catch(e => console.warn('play:', e))
+            audio.play().catch(() => {})
           }
         }
-
-        audio.onloadedmetadata = () => {
+        const onMeta = () => {
           if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
             setDuration(audio.duration)
           }
         }
-
-        audio.onerror = () => {
-          console.error('Audio error:', audio.error?.code, audio.error?.message)
-          setPlaying(false)
+        const onTimeUpdate = () => {
+          setProgress(audio.currentTime)
         }
-
-        audio.onended = async () => {
+        const onEnded = async () => {
           const loop = usePlayerStore.getState().loopMode
           if (loop === 'one') { audio.currentTime = 0; audio.play() }
           else { await nextTrack() }
         }
+        const onError = () => {
+          console.error('Audio error:', audio.error?.code)
+          setPlaying(false)
+          loadingRef.current = false
+        }
 
-        // Try playing (will start as soon as buffered data arrives)
+        audio.addEventListener('canplay', onCanPlay)
+        audio.addEventListener('loadedmetadata', onMeta)
+        audio.addEventListener('timeupdate', onTimeUpdate)
+        audio.addEventListener('ended', onEnded)
+        audio.addEventListener('error', onError)
+
+        cleanupRef.current = () => {
+          audio.removeEventListener('canplay', onCanPlay)
+          audio.removeEventListener('loadedmetadata', onMeta)
+          audio.removeEventListener('timeupdate', onTimeUpdate)
+          audio.removeEventListener('ended', onEnded)
+          audio.removeEventListener('error', onError)
+        }
+
         try {
           await audio.play()
           setPlaying(true)
-        } catch (err) {
-          console.warn('Autoplay blocked:', (err as Error).message)
+        } catch {
           setPlaying(false)
         }
 
-      } catch (err) {
-        console.error('Playback error:', err)
+        loadingRef.current = false
+      } catch {
         setPlaying(false)
+        loadingRef.current = false
       }
     }
 
     run()
-  }, [currentTrack])
+    return () => { cancelled = true }
+  }, [currentTrack, stopAudio])
 
   // Play/Pause
   useEffect(() => {
@@ -129,34 +169,19 @@ export function useAudioPlayer() {
     if (audioRef.current) audioRef.current.volume = volume
   }, [volume])
 
-  // Progress
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    const update = () => {
-      if (!audio.paused) setProgress(audio.currentTime)
-      animFrameRef.current = requestAnimationFrame(update)
-    }
-    if (isPlaying) animFrameRef.current = requestAnimationFrame(update)
-    return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current) }
-  }, [isPlaying, setProgress])
-
   const seek = useCallback((t: number) => {
     if (audioRef.current) { audioRef.current.currentTime = t; setProgress(t) }
   }, [setProgress])
 
-  // Expose seek globally so PlayerView can use it
   useEffect(() => {
     (window as any).__seekAudio = seek
     return () => { delete (window as any).__seekAudio }
   }, [seek])
 
   const stop = useCallback(() => {
-    audioRef.current?.pause()
-    audioRef.current!.src = ''
-    if (objectUrlRef.current) { URL.revokeObjectURL(objectUrlRef.current); objectUrlRef.current = null }
+    stopAudio()
     setPlaying(false)
-  }, [setPlaying])
+  }, [stopAudio, setPlaying])
 
   return { seek, stop }
 }

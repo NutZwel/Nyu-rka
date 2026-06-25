@@ -42,4 +42,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Notifications
   showNotification: (title: string, body: string) => ipcRenderer.send('show-tray-notification', { title, body }),
+
+  // File dialog
+  selectGif: () => ipcRenderer.invoke('select-gif'),
 })

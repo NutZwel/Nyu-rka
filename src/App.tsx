@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { Resizable } from 're-resizable'
 import { useThemeStore } from './store/themeStore'
 import { useAppStore } from './store/appStore'
 import { usePlayerStore } from './store/playerStore'
@@ -11,10 +12,11 @@ import QueueView from './components/QueueView'
 import SettingsView from './components/SettingsView'
 import ThemeEditor from './components/ThemeEditor'
 import NowPlayingBar from './components/NowPlayingBar'
+import SplashScreen from './components/SplashScreen'
 
 export default function App() {
   const { theme, loadTheme } = useThemeStore()
-  const { page } = useAppStore()
+  const { page, showSplash, setShowSplash, sidebarWidth, setSidebarWidth } = useAppStore()
   const { currentTrack, savePlayback, loadPlayback } = usePlayerStore()
   const loadedRef = useRef(false)
 
@@ -29,6 +31,10 @@ export default function App() {
     if (!loadedRef.current) {
       loadedRef.current = true
       loadPlayback()
+      // Load saved sidebar width
+      window.electronAPI?.storeGet?.('sidebarWidth').then((w: number) => {
+        if (w && w >= 48 && w <= 220) setSidebarWidth(w)
+      })
     }
   }, [])
 
@@ -93,22 +99,51 @@ export default function App() {
   }
 
   return (
-    <div
-      className="h-screen flex flex-col overflow-hidden"
-      style={{
-        backgroundColor: theme.background,
-        color: theme.text,
-        fontFamily: theme.fontFamily,
-      }}
-    >
-      <TitleBar />
-      <div className="flex flex-1 overflow-hidden" style={{ gap: `${theme.spacing}px` }}>
-        <Sidebar />
-        <main className="flex-1 overflow-y-auto p-3 animate-fadeIn" style={{ padding: `${8 + theme.spacing}px` }}>
-          {renderPage()}
-        </main>
+    <>
+      {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
+      <div
+        className="h-screen flex flex-col overflow-hidden"
+        style={{
+          backgroundColor: theme.background,
+          color: theme.text,
+          fontFamily: theme.fontFamily,
+          opacity: showSplash ? 0 : 1,
+          transition: 'opacity 0.4s ease',
+        }}
+      >
+        <TitleBar />
+        <div className="flex flex-1 overflow-hidden">
+          <Resizable
+            size={{ width: sidebarWidth, height: '100%' }}
+            minWidth={48}
+            maxWidth={220}
+            onResizeStop={(_e, _dir, _ref, d) => {
+              const newW = sidebarWidth + d.width
+              if (newW >= 48 && newW <= 220) setSidebarWidth(newW)
+            }}
+            enable={{ right: true }}
+            handleStyles={{
+              right: {
+                width: 4,
+                cursor: 'col-resize',
+                right: -2,
+                zIndex: 10,
+                opacity: 0,
+                transition: 'opacity 0.2s',
+              },
+            }}
+            handleClasses={{
+              right: 'sidebar-resize-handle',
+            }}
+          >
+            <Sidebar width={sidebarWidth} />
+          </Resizable>
+          <main className="flex-1 overflow-y-auto p-3 animate-fadeIn" style={{ padding: `${8 + theme.spacing}px` }}>
+            {renderPage()}
+          </main>
+        </div>
+        {currentTrack && <NowPlayingBar />}
       </div>
-      {currentTrack && <NowPlayingBar />}
-    </div>
+    </>
   )
 }

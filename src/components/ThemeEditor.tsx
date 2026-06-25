@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Palette, RefreshCw, Type, Square, Droplets, Eye, EyeOff, ChevronDown, ChevronUp, Check } from 'lucide-react'
+import { Palette, RefreshCw, ChevronDown, ChevronUp, Check } from 'lucide-react'
 import { useThemeStore } from '../store/themeStore'
 import { Theme } from '../types'
+import PixelMascot from './PixelMascot'
 
 type ColorKey = keyof Pick<Theme, 'primary' | 'secondary' | 'accent' | 'background' | 'surface' | 'surfaceAlt' | 'text' | 'textSecondary' | 'border' | 'error' | 'success' | 'warning'>
 
@@ -53,13 +54,17 @@ export default function ThemeEditor() {
       {/* Presets */}
       <div>
         <div className="text-[10px] font-semibold tracking-wider mb-2.5" style={{ color: theme.textSecondary }}>PRESETS</div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {availableThemes.map(p => (
-            <button key={p.name} className="p-2.5 rounded-xl text-[10px] font-medium transition-all relative"
+            <button key={p.name} className="p-3 rounded-xl text-[10px] font-medium transition-all relative flex items-center gap-2"
               style={{ background: theme.name === p.name ? `${theme.primary}20` : theme.surface, border: `1px solid ${theme.name === p.name ? theme.primary : theme.border}30`, color: theme.name === p.name ? theme.primary : theme.textSecondary }}
               onClick={() => applyPreset(p.name)}>
               {theme.name === p.name && <Check size={10} className="absolute top-1 right-1" style={{ color: theme.primary }} />}
-              {p.name}
+              <PixelMascot type={p.mascot} size={28} />
+              <div className="text-left">
+                <div className="text-xs font-semibold">{p.icon} {p.name}</div>
+                <div className="text-[8px] opacity-60">{p.mascot}</div>
+              </div>
             </button>
           ))}
         </div>
