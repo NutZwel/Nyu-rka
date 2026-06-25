@@ -60,23 +60,19 @@ export function useAudioPlayer() {
           return
         }
 
-        if (!result.audioData || !Array.isArray(result.audioData)) {
-          console.error('No audio data in response')
+        if (!result.streamUrl) {
+          console.error('No stream URL in response')
           setPlaying(false)
           return
         }
 
         if (result.duration) setDuration(result.duration)
 
-        // Convert audio data array to Blob URL
-        const uint8 = new Uint8Array(result.audioData)
-        const blob = new Blob([uint8], { type: 'audio/mp4' })
-        const url = URL.createObjectURL(blob)
-        objectUrlRef.current = url
+        // Use streaming URL directly — HTML5 Audio handles chunked HTTP
+        audio.src = result.streamUrl
 
-        audio.src = url
-
-        audio.oncanplaythrough = () => {
+        // Play as soon as data starts flowing
+        audio.oncanplay = () => {
           if (usePlayerStore.getState().isPlaying) {
             audio.play().catch(e => console.warn('play:', e))
           }
@@ -88,7 +84,7 @@ export function useAudioPlayer() {
           }
         }
 
-        audio.onerror = (e) => {
+        audio.onerror = () => {
           console.error('Audio error:', audio.error?.code, audio.error?.message)
           setPlaying(false)
         }
@@ -99,7 +95,7 @@ export function useAudioPlayer() {
           else { await nextTrack() }
         }
 
-        // Try playing
+        // Try playing (will start as soon as buffered data arrives)
         try {
           await audio.play()
           setPlaying(true)

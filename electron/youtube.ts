@@ -1,13 +1,17 @@
 import { ipcMain } from 'electron'
-import { search, video_info } from 'play-dl'
-import { spawn, execSync } from 'child_process'
+import { search } from 'play-dl'
+import { spawn } from 'child_process'
+import { createServer } from 'http'
+
+let activeStream: any = null
+let activeServer: any = null
 
 export function registerYoutubeIPCs() {
   ipcMain.handle('youtube-search', async (_event, query: string) => {
     try {
-      // If it's a YouTube URL, get video info directly
       if (query.includes('youtube.com/watch') || query.includes('youtu.be/') || query.includes('youtube.com/shorts/')) {
         try {
+          const { execSync } = require('child_process')
           const meta = execSync(
             `yt-dlp --print "%(id)s|%(title)s|%(uploader)s|%(duration)s|%(thumbnail)s" --no-warnings "${query}"`,
             { encoding: 'utf8', timeout: 15000 }
@@ -15,62 +19,50 @@ export function registerYoutubeIPCs() {
           const parts = meta.trim().split('|')
           if (parts.length >= 2) {
             return [{
-              id: parts[0],
-              title: parts[1],
+              id: parts[0], title: parts[1],
               url: `https://www.youtube.com/watch?v=${parts[0]}`,
               duration: parseInt(parts[3]) || 0,
               thumbnail: parts[4] || `https://i.ytimg.com/vi/${parts[0]}/hqdefault.jpg`,
-              channel: parts[2] || 'Unknown',
-              views: 0,
+              channel: parts[2] || 'Unknown', views: 0,
             }]
           }
         } catch {}
       }
-
       const results = await search(query, { limit: 15, source: { youtube: 'video' } })
       return results.map(r => ({
         id: r.id, title: r.title, url: r.url,
         duration: r.durationInSec, thumbnail: r.thumbnails?.[0]?.url || '',
         channel: r.channel?.name || '', views: r.views,
       }))
-    } catch (err) {
-      return { error: 'Search failed' }
-    }
+    } catch { return { error: 'Search failed' } }
   })
 
   ipcMain.handle('youtube-get-stream', async (_event, videoUrl: string) => {
     try {
+      killStream()
+
       // Get metadata
-      const meta = await runYtDlp([
-        '--print', 'title',
-        '--print', 'duration',
-        '--no-warnings',
-        videoUrl,
-      ])
-      const metaLines = meta.trim().split('\n')
-      const title = metaLines[0] || 'Unknown'
-      const duration = parseInt(metaLines[1]) || 0
+      const { execSync } = require('child_process')
+      let title = 'Unknown', duration = 0, videoId = 'unknown'
+      try {
+        const meta = execSync(
+          `yt-dlp --print "%(id)s|%(title)s|%(duration)s" --no-warnings "${videoUrl}"`,
+          { encoding: 'utf8', timeout: 10000 }
+        )
+        const parts = meta.trim().split('|')
+        videoId = parts[0] || 'unknown'
+        title = parts[1] || 'Unknown'
+        duration = parseInt(parts[2]) || 0
+      } catch {}
 
-      // Download audio buffer
-      const raw = await runYtDlpBuffer([
-        '-f', 'bestaudio[ext=m4a]/bestaudio',
-        '-o', '-',
-        '--no-warnings',
-        '--no-progress',
-        videoUrl,
-      ])
+      // Start local streaming server — pipes yt-dlp directly to response
+      const port = await startStreamServer(videoUrl)
 
-      if (!raw || raw.length < 1000) {
-        return { error: 'Download failed - empty' }
-      }
-
-      console.log('Audio ready:', (raw.length / 1024 / 1024).toFixed(1), 'MB')
-
-      // Return as Uint8Array for transfer
       return {
-        audioData: Array.from(new Uint8Array(raw)),
+        streamUrl: `http://127.0.0.1:${port}/`,
         duration,
         title,
+        videoId,
       }
     } catch (err) {
       console.error('Stream error:', err)
@@ -78,33 +70,64 @@ export function registerYoutubeIPCs() {
     }
   })
 
-  ipcMain.handle('youtube-stop-stream', () => {
-    return true
-  })
+  ipcMain.handle('youtube-stop-stream', () => { killStream(); return true })
 }
 
-function runYtDlp(args: string[]): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn('yt-dlp', args)
-    let out = ''
-    proc.stdout.on('data', (d: Buffer) => out += d.toString())
-    proc.on('close', (code) => {
-      if (code === 0) resolve(out)
-      else reject(new Error('yt-dlp exited ' + code))
-    })
-    proc.on('error', reject)
-  })
+function killStream() {
+  if (activeStream) { activeStream.kill('SIGKILL'); activeStream = null }
+  if (activeServer) { activeServer.close(); activeServer = null }
 }
 
-function runYtDlpBuffer(args: string[]): Promise<Buffer> {
+function startStreamServer(videoUrl: string): Promise<number> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('yt-dlp', args)
-    const chunks: Buffer[] = []
-    proc.stdout.on('data', (d: Buffer) => chunks.push(d))
-    proc.on('close', (code) => {
-      if (code === 0) resolve(Buffer.concat(chunks))
-      else reject(new Error('yt-dlp exited ' + code))
+    killStream()
+
+    const server = createServer((_req, res) => {
+      // Spawn yt-dlp and pipe directly
+      const proc = spawn('yt-dlp', [
+        '-f', 'bestaudio[ext=m4a]/bestaudio',
+        '-o', '-',
+        '--no-warnings',
+        videoUrl,
+      ], { stdio: ['ignore', 'pipe', 'pipe'] })
+
+      activeStream = proc
+
+      res.writeHead(200, {
+        'Content-Type': 'audio/mp4',
+        'Transfer-Encoding': 'chunked',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache',
+      })
+
+      let hasData = false
+      proc.stdout.on('data', (chunk: Buffer) => {
+        if (!hasData) {
+          hasData = true
+          console.log('Stream started, sending data')
+        }
+        res.write(chunk)
+      })
+
+      proc.stdout.on('end', () => {
+        console.log('Stream ended')
+        res.end()
+      })
+
+      proc.on('error', () => res.end())
+      proc.stderr.on('data', (d: Buffer) => console.log('yt-dlp:', d.toString().trim()))
+
+      _req.on('close', () => proc.kill('SIGKILL'))
     })
-    proc.on('error', reject)
+
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address()
+      if (addr && typeof addr === 'object') {
+        activeServer = server
+        console.log('Stream server on', addr.port)
+        resolve(addr.port)
+      } else reject(new Error('Failed to start server'))
+    })
+    server.on('error', reject)
   })
 }
