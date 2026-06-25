@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 
 interface AppState {
-  page: 'player' | 'search' | 'queue' | 'playlist' | 'settings' | 'theme-editor'
+  page: 'player' | 'search' | 'queue' | 'playlist' | 'settings' | 'theme-editor' | 'lyrics'
   alwaysOnTop: boolean
   isLoggedIn: boolean
   isMinimalView: boolean

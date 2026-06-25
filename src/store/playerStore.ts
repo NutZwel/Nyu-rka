@@ -44,6 +44,32 @@ async function preloadTrack(track: Track) {
   try { await window.electronAPI?.youtubePreload?.(url) } catch {}
 }
 
+// Normalize title for dedup — remove common suffixes like (Lyrics), (Official Video), (Live), etc.
+function normalizeTitle(title: string): string {
+  return title
+    .toLowerCase()
+    // Strip any leading 'cause, 'til, etc. — the apostrophe-s at start
+    .replace(/^'(?=\w)/, '')
+    // Remove content in parentheses/brackets: (Lyrics), [Official Video], {Live}, etc.
+    .replace(/[\(\[\{][^\)\]\}]*[\)\]\}]/g, '')
+    // Remove common markers
+    .replace(/official\s*(music\s*)?video|lyric\s*video|lyrics|live|stripped|acoustic|remix|version/g, '')
+    // Remove feat.* / ft.* parts
+    .replace(/\b(feat|ft)\.[^\w]*\w+(?:\s*&\s*\w+)*/g, '')
+    // Remove dashes, pipes, punctuation
+    .replace(/[-–—|,\.'"]/g, ' ')
+    // Collapse whitespace
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// Track dedup key: normalized title + normalized artist
+function trackDedupKey(track: Track): string {
+  const title = normalizeTitle(track.title)
+  const artist = track.artist.toLowerCase().replace(/[-–—|,\.&]+/g, ' ').replace(/\s+/g, ' ').trim()
+  return `${title}||${artist}`
+}
+
 // Extract YouTube playlist ID or video IDs from URL
 function parsePlaylistUrl(url: string): { list?: string; videoId?: string } {
   try {
@@ -199,19 +225,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const query = `${state.currentTrack.title} ${state.currentTrack.artist} music`
       const yt = await window.electronAPI?.youtubeSearch(query)
       if (Array.isArray(yt) && yt.length > 0) {
-        const currentTitle = state.currentTrack.title.toLowerCase()
         const newTracks: Track[] = []
-        const existingIds = new Set(state.queue.map(q => q.track.id))
+
+        // Kumpulin semua dedup key (normalized title||artist) dari queue + current track
+        const existingKeys = new Set<string>()
+        state.queue.forEach(q => existingKeys.add(trackDedupKey(q.track)))
+        if (state.currentTrack) existingKeys.add(trackDedupKey(state.currentTrack))
+        const currentKey = state.currentTrack ? trackDedupKey(state.currentTrack) : ''
 
         for (const r of yt) {
-          const id = `yt-${r.id}`
-          if (existingIds.has(id) || id === state.currentTrack?.id) continue
-          if (r.title.toLowerCase() === currentTitle) continue
-          newTracks.push({
-            id, title: r.title, artist: r.channel || 'Unknown',
+          const candidate: Track = {
+            id: `yt-${r.id}`, title: r.title, artist: r.channel || 'Unknown',
             album: 'Recommendation', albumArt: r.thumbnail || '',
             duration: r.duration || 0, uri: r.url, youtubeId: r.id, youtubeUrl: r.url,
-          })
+          }
+          const key = trackDedupKey(candidate)
+
+          // Skip kalo ID atau judul+artist (setelah dinormalisasi) udah ada
+          if (existingKeys.has(key)) continue
+          if (key === currentKey) continue
+
+          newTracks.push(candidate)
+          existingKeys.add(key)
           if (newTracks.length >= 5) break
         }
 

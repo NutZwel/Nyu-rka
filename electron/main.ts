@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, Tray, Menu } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, Tray, Menu, net } from 'electron'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import Store from 'electron-store'
@@ -200,6 +200,20 @@ app.whenReady().then(() => {
       return result.filePaths[0]
     }
     return null
+  })
+
+  // Lyrics fetch via main process (biar gak kena CSP blokade)
+  ipcMain.handle('fetch-lyrics', async (_event, url: string) => {
+    try {
+      const response = await net.fetch(url)
+      if (!response.ok) {
+        return { error: `HTTP ${response.status}`, status: response.status }
+      }
+      const data = await response.json()
+      return { data, status: response.status }
+    } catch (err) {
+      return { error: (err as Error).message, status: 0 }
+    }
   })
 })
 

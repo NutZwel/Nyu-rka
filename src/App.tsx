@@ -13,6 +13,7 @@ import SettingsView from './components/SettingsView'
 import ThemeEditor from './components/ThemeEditor'
 import NowPlayingBar from './components/NowPlayingBar'
 import SplashScreen from './components/SplashScreen'
+import LyricsView from './components/LyricsView'
 
 export default function App() {
   const { theme, loadTheme } = useThemeStore()
@@ -85,6 +86,8 @@ export default function App() {
     switch (page) {
       case 'player':
         return <PlayerView />
+      case 'lyrics':
+        return <LyricsView />
       case 'search':
         return <SearchView />
       case 'queue':

@@ -1,6 +1,6 @@
 import {
   Search, ListMusic, Palette, Settings,
-  Disc3, LayoutGrid, Music
+  Disc3, LayoutGrid, Music, FileText
 } from 'lucide-react'
 import { useThemeStore } from '../store/themeStore'
 import { useAppStore } from '../store/appStore'
@@ -9,6 +9,7 @@ import PixelMascot from './PixelMascot'
 
 const navItems = [
   { id: 'player' as const, label: 'Now Playing', icon: LayoutGrid },
+  { id: 'lyrics' as const, label: 'Lyrics', icon: FileText },
   { id: 'search' as const, label: 'Search', icon: Search },
   { id: 'queue' as const, label: 'Queue', icon: ListMusic },
   { id: 'theme-editor' as const, label: 'Themes', icon: Palette },

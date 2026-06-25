@@ -45,4 +45,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // File dialog
   selectGif: () => ipcRenderer.invoke('select-gif'),
+
+  // Lyrics fetch (via main process)
+  fetchLyrics: (url: string) => ipcRenderer.invoke('fetch-lyrics', url),
 })
